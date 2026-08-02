@@ -1,0 +1,66 @@
+name: Build and Release Chromium Android
+
+on:
+  workflow_dispatch: # Memunculkan tombol "Mulai" manual dari HP
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Free Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+
+    - name: Run Chromium Build Script
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        set -e
+        echo "=== 1. Menyiapkan Depot Tools ==="
+        git clone https://googlesource.com
+        export PATH="$PWD/depot_tools:$PATH"
+
+        echo "=== 2. Membuat Directory Source Chromium ==="
+        mkdir -p chromium_src && cd chromium_src
+
+        echo "=== 3. Fetching Chromium Source ==="
+        fetch --no-history android
+        cd src
+        git fetch origin refs/tags/153.0.7987.0
+        git checkout -b build_153.0.7987.0 refs/tags/153.0.7987.0
+        gclient sync -D --force --reset
+
+        echo "=== 4. Memasang Dependensi Build ==="
+        sudo ./build/install-build-deps.sh --android --no-prompt
+
+        echo "=== 5. Mengonfigurasi out/Default/args.gn ==="
+        mkdir -p out/Default
+        cat << 'EOF' > out/Default/args.gn
+        target_os = "android"
+        target_cpu = "arm"
+        is_debug = false
+        is_official_build = true
+        is_component_build = false
+        symbol_level = 0
+        enable_nacls = false
+        default_min_sdk_version = 24
+        android_static_analysis = "none"
+        ffmpeg_branding = "Chrome"
+        proprietary_codecs = true
+        EOF
+
+        gn gen out/Default
+
+        echo "=== 6. Mengompilasi Chromium APK ==="
+        autoninja -C out/Default chrome_public_apk
+
+        echo "=== 7. Mengunggah ke GitHub Release ==="
+        echo "$GH_TOKEN" | gh auth login --with-token
+        gh release create "153.0.7987.0" out/Default/apks/ChromePublic.apk \
+          --repo "icsriyand/chromium" \
+          --title "Chromium v153.0.7987.0 (Android 7)" \
+          --notes "Kompilasi otomatis Android armeabi-v7a via GitHub Actions" \
+          --clobber
