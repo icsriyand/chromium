@@ -19,8 +19,13 @@ jobs:
         GH_TOKEN: ${{ secrets.GH_TOKEN }}
       run: |
         set -e
+        
+        # PERBAIKAN: Memaksa Git mengenali domain penuh Google Source agar tidak error 128
+        git config --global url."https://chromium.googlesource.com/".insteadOf "https://googlesource.com/"
+        git config --global --add safe.directory '*'
+
         echo "=== 1. Menyiapkan Depot Tools ==="
-        git clone https://googlesource.com
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
         export PATH="$PWD/depot_tools:$PATH"
 
         echo "=== 2. Membuat Directory Source Chromium ==="
